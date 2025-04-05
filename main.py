@@ -7,6 +7,7 @@ import ollama
 import time
 import threading
 import pandas as pd
+import json
 from typing import List, Dict, Any, Generator, Optional, Tuple
 from contextlib import contextmanager
 from dotenv import load_dotenv
@@ -39,150 +40,6 @@ MAX_SQL_TOKENS = 512
 MAX_REQUESTS_PER_MINUTE = 10
 MAX_RESULTS = 50
 DB_CONNECTION_TIMEOUT = 30
-
-# Database Schema Description
-SCHEMA_DESCRIPTION = """
-Database Schema Description (Northwind Database)
-
-Tables, Columns and Relationships:
-
-1. Categories
-   - CategoryID (int, PK)
-   - CategoryName (nvarchar(30))
-   - Description (ntext, nullable)
-   - Picture (image, nullable)
-
-2. CustomerCustomerDemo (Junction Table)
-   - CustomerID (nchar(10), FK to Customers)
-   - CustomerTypeID (nchar(20), FK to CustomerDemographics)
-
-3. CustomerDemographics
-   - CustomerTypeID (nchar(20), PK)
-   - CustomerDesc (ntext, nullable)
-
-4. Customers
-   - CustomerID (nchar(10), PK)
-   - CompanyName (nvarchar(80))
-   - ContactName (nvarchar(60), nullable)
-   - ContactTitle (nvarchar(60), nullable)
-   - Address (nvarchar(120), nullable)
-   - City (nvarchar(30), nullable)
-   - Region (nvarchar(30), nullable)
-   - PostalCode (nvarchar(20), nullable)
-   - Country (nvarchar(30), nullable)
-   - Phone (nvarchar(48), nullable)
-   - Fax (nvarchar(48), nullable)
-
-5. Employees
-   - EmployeeID (int, PK)
-   - LastName (nvarchar(40))
-   - FirstName (nvarchar(20))
-   - Title (nvarchar(60), nullable)
-   - TitleOfCourtesy (nvarchar(50), nullable)
-   - BirthDate (datetime, nullable)
-   - HireDate (datetime, nullable)
-   - Address (nvarchar(120), nullable)
-   - City (nvarchar(30), nullable)
-   - Region (nvarchar(30), nullable)
-   - PostalCode (nvarchar(20), nullable)
-   - Country (nvarchar(30), nullable)
-   - HomePhone (nvarchar(48), nullable)
-   - Extension (nvarchar(8), nullable)
-   - Photo (image, nullable)
-   - Notes (ntext, nullable)
-   - ReportsTo (int, nullable, FK to Employees)
-   - PhotoPath (nvarchar(510), nullable)
-
-6. EmployeeTerritories (Junction Table)
-   - EmployeeID (int, FK to Employees)
-   - TerritoryID (nvarchar(40), FK to Territories)
-
-7. Order Details
-   - OrderID (int, FK to Orders)
-   - ProductID (int, FK to Products)
-   - UnitPrice (money)
-   - Quantity (smallint)
-   - Discount (real)
-
-8. Orders
-   - OrderID (int, PK)
-   - CustomerID (nchar(10), nullable, FK to Customers)
-   - EmployeeID (int, nullable, FK to Employees)
-   - OrderDate (datetime, nullable)
-   - RequiredDate (datetime, nullable)
-   - ShippedDate (datetime, nullable)
-   - ShipVia (int, nullable, FK to Shippers)
-   - Freight (money, nullable)
-   - ShipName (nvarchar(80), nullable)
-   - ShipAddress (nvarchar(120), nullable)
-   - ShipCity (nvarchar(30), nullable)
-   - ShipRegion (nvarchar(30), nullable)
-   - ShipPostalCode (nvarchar(20), nullable)
-   - ShipCountry (nvarchar(30), nullable)
-
-9. Products
-   - ProductID (int, PK)
-   - ProductName (nvarchar(80))
-   - SupplierID (int, nullable, FK to Suppliers)
-   - CategoryID (int, nullable, FK to Categories)
-   - QuantityPerUnit (nvarchar(40), nullable)
-   - UnitPrice (money, nullable)
-   - UnitsInStock (smallint, nullable)
-   - UnitsOnOrder (smallint, nullable)
-   - ReorderLevel (smallint, nullable)
-   - Discontinued (bit)
-
-10. Region
-    - RegionID (int, PK)
-    - RegionDescription (nchar(100))
-
-11. Shippers
-    - ShipperID (int, PK)
-    - CompanyName (nvarchar(80))
-    - Phone (nvarchar(48), nullable)
-
-12. Suppliers
-    - SupplierID (int, PK)
-    - CompanyName (nvarchar(80))
-    - ContactName (nvarchar(60), nullable)
-    - ContactTitle (nvarchar(60), nullable)
-    - Address (nvarchar(120), nullable)
-    - City (nvarchar(30), nullable)
-    - Region (nvarchar(30), nullable)
-    - PostalCode (nvarchar(20), nullable)
-    - Country (nvarchar(30), nullable)
-    - Phone (nvarchar(48), nullable)
-    - Fax (nvarchar(48), nullable)
-    - HomePage (ntext, nullable)
-
-13. Territories
-    - TerritoryID (nvarchar(40), PK)
-    - TerritoryDescription (nchar(100))
-    - RegionID (int, FK to Region)
-
-Key Relationships:
-1. Products → Categories (Products.CategoryID → Categories.CategoryID)
-2. Orders → Customers (Orders.CustomerID → Customers.CustomerID)
-3. Orders → Employees (Orders.EmployeeID → Employees.EmployeeID)
-4. Orders → Shippers (Orders.ShipVia → Shippers.ShipperID)
-5. Order Details → Orders (Order Details.OrderID → Orders.OrderID)
-6. Order Details → Products (Order Details.ProductID → Products.ProductID)
-7. EmployeeTerritories → Employees (EmployeeTerritories.EmployeeID → Employees.EmployeeID)
-8. EmployeeTerritories → Territories (EmployeeTerritories.TerritoryID → Territories.TerritoryID)
-9. Territories → Region (Territories.RegionID → Region.RegionID)
-10. Employees → Employees (Employees.ReportsTo → Employees.EmployeeID)
-11. CustomerCustomerDemo → Customers (CustomerCustomerDemo.CustomerID → Customers.CustomerID)
-12. CustomerCustomerDemo → CustomerDemographics (CustomerCustomerDemo.CustomerTypeID → CustomerDemographics.CustomerTypeID)
-13. Products → Suppliers (Products.SupplierID → Suppliers.SupplierID)
-
-Business Rules:
-1. All primary keys are non-nullable
-2. Most descriptive fields are non-nullable (e.g., ProductName, CompanyName)
-3. Contact information and address fields are often nullable
-4. Junction tables have composite keys
-5. Money fields represent prices or costs
-6. Date fields track order and employee information
-"""
 
 class DatabaseManager:
     """Handles all database operations with connection pooling and retries"""
@@ -292,6 +149,93 @@ class DatabaseManager:
         query_lower = query.lower()
         return not any(re.search(pattern, query_lower) for pattern in dangerous_patterns)
 
+    @staticmethod
+    def get_schema_info(force_refresh=False) -> Dict[str, Any]:
+        """Dynamically fetch and cache schema information"""
+        cache_file = "schema_cache.json"
+        
+        # Return cached schema if available and not forcing refresh
+        if not force_refresh and os.path.exists(cache_file):
+            with open(cache_file, 'r') as f:
+                return json.load(f)
+        
+        # Query to get schema information (optimized version)
+        schema_query = """
+        SELECT 
+            t.TABLE_SCHEMA,
+            t.TABLE_NAME,
+            c.COLUMN_NAME,
+            c.DATA_TYPE,
+            c.IS_NULLABLE
+        FROM INFORMATION_SCHEMA.TABLES t
+        JOIN INFORMATION_SCHEMA.COLUMNS c 
+            ON t.TABLE_NAME = c.TABLE_NAME AND t.TABLE_SCHEMA = c.TABLE_SCHEMA
+        WHERE t.TABLE_TYPE = 'BASE TABLE'
+        ORDER BY t.TABLE_NAME, c.ORDINAL_POSITION;
+        """
+        
+        # Get foreign key relationships separately
+        fk_query = """
+        SELECT
+            KCU1.TABLE_NAME AS FK_TABLE,
+            KCU1.COLUMN_NAME AS FK_COLUMN,
+            KCU2.TABLE_NAME AS REFERENCED_TABLE,
+            KCU2.COLUMN_NAME AS REFERENCED_COLUMN
+        FROM INFORMATION_SCHEMA.REFERENTIAL_CONSTRAINTS RC
+        JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE KCU1
+            ON KCU1.CONSTRAINT_NAME = RC.CONSTRAINT_NAME
+        JOIN INFORMATION_SCHEMA.KEY_COLUMN_USAGE KCU2
+            ON KCU2.CONSTRAINT_NAME = RC.UNIQUE_CONSTRAINT_NAME
+        """
+        
+        with DatabaseManager.get_connection() as conn:
+            with conn.cursor() as cursor:
+                # Get tables and columns
+                cursor.execute(schema_query)
+                schema_data = [dict(zip([col[0] for col in cursor.description], row)) 
+                             for row in cursor.fetchall()]
+                
+                # Get foreign keys
+                cursor.execute(fk_query)
+                fk_data = [dict(zip([col[0] for col in cursor.description], row)) 
+                          for row in cursor.fetchall()]
+        
+        # Organize the schema information
+        schema_info = {
+            "tables": {},
+            "relationships": []
+        }
+        
+        # Process tables and columns
+        for row in schema_data:
+            table_key = f"{row['TABLE_SCHEMA']}.{row['TABLE_NAME']}"
+            if table_key not in schema_info["tables"]:
+                schema_info["tables"][table_key] = {
+                    "columns": [],
+                    "primary_keys": []
+                }
+            
+            schema_info["tables"][table_key]["columns"].append({
+                "name": row["COLUMN_NAME"],
+                "type": row["DATA_TYPE"],
+                "nullable": row["IS_NULLABLE"] == "YES"
+            })
+        
+        # Process foreign key relationships
+        for row in fk_data:
+            schema_info["relationships"].append({
+                "from_table": row["FK_TABLE"],
+                "from_column": row["FK_COLUMN"],
+                "to_table": row["REFERENCED_TABLE"],
+                "to_column": row["REFERENCED_COLUMN"]
+            })
+        
+        # Cache the schema
+        with open(cache_file, 'w') as f:
+            json.dump(schema_info, f, indent=2)
+        
+        return schema_info
+
 class OllamaLLM:
     """Handles all LLM-related operations including SQL generation and response formatting"""
     
@@ -305,17 +249,31 @@ class OllamaLLM:
         """Generate and validate SQL - Only SELECT queries allowed"""
         for attempt in range(MAX_SQL_ATTEMPTS):
             try:
+                # Get current schema information
+                schema_info = DatabaseManager.get_schema_info()
+                
+                # Generate schema description for prompt
+                schema_description = "Database Schema Information:\n\n"
+                for table_key, table_info in schema_info["tables"].items():
+                    schema_description += f"Table: {table_key}\n"
+                    schema_description += "Columns:\n"
+                    for col in table_info["columns"]:
+                        schema_description += f"- {col['name']} ({col['type']}, {'nullable' if col['nullable'] else 'not null'})\n"
+                    schema_description += "\n"
+                
+                # Add relationships
+                schema_description += "Relationships:\n"
+                for rel in schema_info["relationships"]:
+                    schema_description += f"- {rel['from_table']}.{rel['from_column']} → {rel['to_table']}.{rel['to_column']}\n"
+                
                 response = ollama.generate(
                     model=self.primary_model,
                     prompt=f"""
                     [INST] <<SYS>>
                     You are a SQL expert for the Northwind database. Follow these rules ABSOLUTELY:
                     
-                    CRITICAL SCHEMA DETAILS:
-                    - Orders.ShipVia (int) connects to Shippers.ShipperID (int)
-                    - Orders.CustomerID (nchar) connects to Customers.CustomerID (nchar)
-                    - ShipCity is in Orders table
-                    - Shipper table has CompanyName and ShipperID columns
+                    CURRENT SCHEMA INFORMATION:
+                    {schema_description}
                     
                     EXAMPLE QUERIES:
                     - Customers: "SELECT TOP {MAX_RESULTS} * FROM Customers WHERE Country = 'Germany'"
